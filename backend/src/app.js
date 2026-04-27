@@ -3,7 +3,7 @@ const app = express();
 
 app.use(express.json());
 
-// API 1: health
+// API 1: health test
 app.get("/api/health", (req, res) => {
   res.status(200).json({ status: "ok" });
 });
