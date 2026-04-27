@@ -8,9 +8,9 @@ on:
       - ".github/workflows/ci-backend.yml"
   pull_request:
     branches: ["**"]
-    paths:
-      - "backend/**"
-      - ".github/workflows/ci-backend.yml"
+    # paths:
+    #   - "backend/**"
+    #   - ".github/workflows/ci-backend.yml"
 
 jobs:
   lint:
