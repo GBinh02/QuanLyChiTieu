@@ -8,9 +8,6 @@ on:
       - ".github/workflows/ci-backend.yml"
   pull_request:
     branches: ["**"]
-    # paths:
-    #   - "backend/**"
-    #   - ".github/workflows/ci-backend.yml"
 
 jobs:
   lint:
@@ -106,14 +103,6 @@ jobs:
       - name: Install production dependencies
         run: npm ci --omit=dev
 
-      - name: Verify server starts (smoke test)
-        run: |
-          node -e "require('./src/app.js'); console.log('✅ Backend OK')"
-        env:
-          NODE_ENV: production
-          DB_HOST: localhost
-          DB_PORT: 3306
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: expense_tracker
-          PORT: 3001
+      - name: Verify app module loads (syntax check)
+        # Không connect DB, chỉ kiểm tra module load được không
+        run: node -e "const app = require('./src/app.js'); console.log('app.js loaded OK');"
