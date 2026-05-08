@@ -165,6 +165,12 @@ body {
   padding: 1.5rem;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+}
+
+.main-grid .card {
+  height: 580px; /* Fixed height for dashboard/stats main cards */
 }
 
 .card h3 {
@@ -218,6 +224,23 @@ input:focus, select:focus {
   opacity: 0.9;
 }
 
+.btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+  border: 1px solid var(--border);
+  padding: 0.8rem;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  display: inline-block;
+  text-align: center;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
+}
+
 /* History & Stats */
 .empty-state {
   text-align: center;
@@ -245,6 +268,28 @@ input:focus, select:focus {
   padding: 0.75rem;
   font-size: 0.85rem;
   border-bottom: 1px solid #f1f5f9;
+}
+
+.transaction-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 0.5rem;
+}
+
+/* Custom scrollbar for better look */
+.transaction-list::-webkit-scrollbar {
+  width: 6px;
+}
+.transaction-list::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+.transaction-list::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+.transaction-list::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .transaction-item {

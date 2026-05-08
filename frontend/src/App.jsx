@@ -1,22 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
-import { PlusCircle, Trash2, TrendingUp, TrendingDown, Wallet, BarChart3, LayoutDashboard, LogOut, UserPlus, LogIn } from 'lucide-react';
+import Papa from 'papaparse';
+import { Trash2 } from 'lucide-react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, PointElement, LineElement } from 'chart.js';
-import { Pie, Bar, Line } from 'react-chartjs-2';
+import { Pie, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, PointElement, LineElement);
 
 const API_URL = 'http://localhost:5000/api';
-
-const formatVND = (amount) => {
-  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount).replace('₫', 'đ');
-};
-
-const formatValue = (val) => {
-  const formatted = new Intl.NumberFormat('vi-VN').format(Math.abs(val));
-  return `${val < 0 ? '-' : val > 0 ? '+' : ''}${formatted} đ`;
-};
 
 // --- Components ---
 
@@ -89,7 +81,10 @@ const Login = ({ setUser }) => {
 
   return (
     <div className="auth-container card">
-      <h2 style={{textAlign: 'center', marginBottom: '2rem'}}>Đăng nhập</h2>
+      <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
+        <img src="/logo.png" alt="Logo" style={{width: '120px', height: '120px', borderRadius: '24px', marginBottom: '1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.1)'}} />
+        <h2 style={{margin: 0}}>Đăng nhập</h2>
+      </div>
       <form onSubmit={handleLogin}>
         <div className="form-group">
           <label>Email</label>
@@ -101,8 +96,8 @@ const Login = ({ setUser }) => {
         </div>
         <button type="submit" className="btn-primary">Đăng nhập</button>
       </form>
-      <p style={{marginTop: '1.5rem', textAlign: 'center', fontSize: '0.85rem'}}>
-        Chưa có tài khoản? <Link to="/register" style={{color: 'var(--primary)', fontWeight: 600}}>Đăng ký</Link>
+      <p style={{marginTop: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)'}}>
+        Bạn mới sử dụng ứng dụng? <Link to="/register" style={{color: 'var(--primary)', fontWeight: 600, textDecoration: 'none'}}>Tạo tài khoản mới</Link>
       </p>
     </div>
   );
@@ -112,10 +107,15 @@ const Register = () => {
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
     e.preventDefault();
+    if (password !== confirmPassword) {
+      alert('Mật khẩu nhập lại không khớp!');
+      return;
+    }
     try {
       await axios.post(`${API_URL}/register`, { username, email, password });
       alert('Đăng ký thành công!');
@@ -128,7 +128,10 @@ const Register = () => {
 
   return (
     <div className="auth-container card">
-      <h2 style={{textAlign: 'center', marginBottom: '2rem'}}>Đăng ký</h2>
+      <div style={{textAlign: 'center', marginBottom: '1.5rem'}}>
+        <img src="/logo.png" alt="Logo" style={{width: '120px', height: '120px', borderRadius: '24px', marginBottom: '1rem', boxShadow: '0 10px 25px rgba(0,0,0,0.1)'}} />
+        <h2 style={{margin: 0}}>Đăng ký</h2>
+      </div>
       <form onSubmit={handleRegister}>
         <div className="form-group">
           <label>Tên người dùng</label>
@@ -142,8 +145,15 @@ const Register = () => {
           <label>Mật khẩu</label>
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
         </div>
+        <div className="form-group">
+          <label>Nhập lại mật khẩu</label>
+          <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+        </div>
         <button type="submit" className="btn-primary">Đăng ký</button>
       </form>
+      <p style={{marginTop: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)'}}>
+        Đã có tài khoản rồi? <Link to="/login" style={{color: 'var(--primary)', fontWeight: 600, textDecoration: 'none'}}>Đăng nhập ngay</Link>
+      </p>
     </div>
   );
 };
@@ -196,12 +206,62 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
     fetchTransactions();
   };
 
+  const handleCSVUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const token = localStorage.getItem('token');
+        const transactions = results.data.map(row => {
+          const rawType = (row.type || row['Loại'] || '').toLowerCase();
+          const isIncome = rawType === 'income' || rawType === 'thu nhập';
+          return {
+            description: row.description || row['Tên'] || row['mô tả'],
+            amount: parseFloat(row.amount || row['Số tiền'] || row['giá trị']),
+            type: isIncome ? 'income' : 'expense',
+            category: row.category || row['Danh mục'] || 'Khác'
+          };
+        }).filter(t => t.description && !isNaN(t.amount));
+
+        if (transactions.length === 0) {
+          alert('Không tìm thấy dữ liệu hợp lệ trong tệp CSV. Vui lòng kiểm tra định dạng.');
+          return;
+        }
+
+        try {
+          await axios.post(`${API_URL}/transactions/bulk`, { transactions }, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          alert(`Đã nhập thành công ${transactions.length} giao dịch!`);
+          fetchTransactions();
+        } catch (err) {
+          console.error('Import error:', err);
+          alert('Lỗi khi nhập dữ liệu: ' + (err.response?.data?.error || err.message));
+        }
+      }
+    });
+  };
+
   return (
     <div className="container">
       <Summary transactions={transactions} />
       <div className="main-grid">
         <div className="card">
-          <h3>Thêm giao dịch mới</h3>
+          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem'}}>
+            <h3 style={{margin: 0}}>Thêm giao dịch mới</h3>
+            <div style={{display: 'flex', gap: '0.5rem'}}>
+              <a href="/mau_nhap_lieu.csv" download className="btn-secondary" style={{fontSize: '0.8rem', padding: '0.4rem 0.8rem', textDecoration: 'none'}}>
+                Tải tệp mẫu
+              </a>
+              <label className="btn-secondary" style={{fontSize: '0.8rem', padding: '0.4rem 0.8rem', cursor: 'pointer'}}>
+                Nhập CSV
+                <input type="file" accept=".csv" onChange={handleCSVUpload} style={{display: 'none'}} />
+              </label>
+            </div>
+          </div>
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>Tên giao dịch</label>
@@ -354,19 +414,20 @@ const Stats = ({ transactions }) => {
 // --- Main App ---
 
 function App() {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem('user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
   const [transactions, setTransactions] = useState([]);
 
-  useEffect(() => {
-    const savedUser = localStorage.getItem('user');
-    if (savedUser) setUser(JSON.parse(savedUser));
-  }, []);
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setTransactions([]);
+  };
 
-  useEffect(() => {
-    if (user) fetchTransactions();
-  }, [user]);
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     const token = localStorage.getItem('token');
     try {
       const res = await axios.get(`${API_URL}/transactions`, {
@@ -376,14 +437,14 @@ function App() {
     } catch (err) {
       if (err.response?.status === 401) handleLogout();
     }
-  };
+  }, []);
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    setTransactions([]);
-  };
+  useEffect(() => {
+    const loadData = async () => {
+      if (user) await fetchTransactions();
+    };
+    loadData();
+  }, [user, fetchTransactions]);
 
   return (
     <Router>

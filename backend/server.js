@@ -1,7 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2/promise');
+const sqlite3 = require('sqlite3');
+const { open } = require('sqlite');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -15,21 +16,38 @@ app.use(cors({
 }));
 app.use(express.json());
 
-let pool;
+let db;
 
 async function initDb() {
     try {
-        pool = mysql.createPool({
-            host: process.env.DB_HOST,
-            user: process.env.DB_USER,
-            password: process.env.DB_PASSWORD,
-            database: process.env.DB_NAME,
-            waitForConnections: true,
-            connectionLimit: 10
+        db = await open({
+            filename: './database.sqlite',
+            driver: sqlite3.Database
         });
-        console.log('Connected to MySQL');
+
+        // Create tables if they don't exist
+        await db.exec(`
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                email TEXT NOT NULL UNIQUE,
+                password TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                description TEXT NOT NULL,
+                amount REAL NOT NULL,
+                type TEXT NOT NULL,
+                category TEXT,
+                date DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        `);
+        console.log('Connected to SQLite Database');
     } catch (error) {
-        console.error('MySQL Connection Error:', error.message);
+        console.error('Database Connection Error:', error.message);
         process.exit(1);
     }
 }
@@ -56,7 +74,7 @@ app.post('/api/register', async (req, res) => {
     const { username, email, password } = req.body;
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        await pool.query(
+        await db.run(
             'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
             [username, email, hashedPassword]
         );
@@ -70,8 +88,7 @@ app.post('/api/register', async (req, res) => {
 app.post('/api/login', async (req, res) => {
     const { email, password } = req.body;
     try {
-        const [users] = await pool.query('SELECT * FROM users WHERE email = ?', [email]);
-        const user = users[0];
+        const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
         if (!user || !(await bcrypt.compare(password, user.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
@@ -85,7 +102,7 @@ app.post('/api/login', async (req, res) => {
 // Transaction Routes (Protected)
 app.get('/api/transactions', authenticateToken, async (req, res) => {
     try {
-        const [rows] = await pool.query(
+        const rows = await db.all(
             'SELECT * FROM transactions WHERE user_id = ? ORDER BY date DESC',
             [req.user.id]
         );
@@ -98,20 +115,40 @@ app.get('/api/transactions', authenticateToken, async (req, res) => {
 app.post('/api/transactions', authenticateToken, async (req, res) => {
     const { description, amount, type, category } = req.body;
     try {
-        const [result] = await pool.query(
+        const result = await db.run(
             'INSERT INTO transactions (user_id, description, amount, type, category) VALUES (?, ?, ?, ?, ?)',
             [req.user.id, description, amount, type, category]
         );
-        const [newRows] = await pool.query('SELECT * FROM transactions WHERE id = ?', [result.insertId]);
-        res.status(201).json(newRows[0]);
+        const newRow = await db.get('SELECT * FROM transactions WHERE id = ?', [result.lastID]);
+        res.status(201).json(newRow);
     } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/transactions/bulk', authenticateToken, async (req, res) => {
+    const { transactions } = req.body;
+    if (!Array.isArray(transactions)) return res.status(400).json({ error: 'Invalid data format' });
+
+    try {
+        await db.run('BEGIN TRANSACTION');
+        for (const t of transactions) {
+            await db.run(
+                'INSERT INTO transactions (user_id, description, amount, type, category) VALUES (?, ?, ?, ?, ?)',
+                [req.user.id, t.description, t.amount, t.type, t.category]
+            );
+        }
+        await db.run('COMMIT');
+        res.status(201).json({ message: `Successfully imported ${transactions.length} transactions` });
+    } catch (error) {
+        await db.run('ROLLBACK');
         res.status(500).json({ error: error.message });
     }
 });
 
 app.delete('/api/transactions/:id', authenticateToken, async (req, res) => {
     try {
-        await pool.query('DELETE FROM transactions WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
+        await db.run('DELETE FROM transactions WHERE id = ? AND user_id = ?', [req.params.id, req.user.id]);
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
