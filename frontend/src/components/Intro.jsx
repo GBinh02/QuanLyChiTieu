@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom';
 import Logo from './Logo';
 
@@ -46,8 +46,8 @@ const Intro = () => {
           animation: 'fadeIn 0.8s ease forwards',
           marginBottom: '4rem'
         }}>
-          <button 
-            className="intro-btn btn-login" 
+          <button
+            className="intro-btn btn-login"
             onClick={() => navigate('/login')}
             style={{
               background: '#1f2937',
@@ -64,8 +64,8 @@ const Intro = () => {
           >
             Login
           </button>
-          <button 
-            className="intro-btn btn-register" 
+          <button
+            className="intro-btn btn-register"
             onClick={() => navigate('/register')}
             style={{
               background: 'white',
@@ -85,7 +85,8 @@ const Intro = () => {
         </div>
       )}
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @keyframes fadeIn {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }

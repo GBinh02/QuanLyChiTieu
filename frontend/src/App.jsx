@@ -117,11 +117,17 @@ const Register = () => {
       return;
     }
     try {
-      await axios.post(`${API_URL}/register`, { username, email, password });
+      console.log('Attempting registration:', { username, email });
+      const response = await axios.post(`${API_URL}/register`, { username, email, password });
+      console.log('Registration response:', response.data);
       alert('Đăng ký thành công!');
       navigate('/login');
     } catch (err) { 
-      console.error('Registration Error:', err);
+      console.error('Registration Error Details:', {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status
+      });
       alert('Đăng ký thất bại. Vui lòng kiểm tra console hoặc đảm bảo backend đang chạy.'); 
     }
   };
