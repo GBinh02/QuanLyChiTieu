@@ -42,20 +42,6 @@ jobs:
       run:
         working-directory: backend
 
-    services:
-      mysql:
-        image: mysql:8.0
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: expense_tracker_test
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -74,12 +60,8 @@ jobs:
         run: npm test
         env:
           NODE_ENV: test
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_USER: root
-          DB_PASSWORD: root
-          DB_NAME: expense_tracker_test
           PORT: 3001
+          JWT_SECRET: test_jwt_secret_for_ci
 
   build:
     name: 🏗️ Build Backend
@@ -103,6 +85,5 @@ jobs:
       - name: Install production dependencies
         run: npm ci --omit=dev
 
-      - name: Verify app module loads (syntax check)
-        # Không connect DB, chỉ kiểm tra module load được không
-        run: node -e "const app = require('./src/app.js'); console.log('app.js loaded OK');"
+      - name: Verify app loads (syntax check)
+        run: node -e "const app = require('./src/app.js'); console.log('✅ app.js loaded OK');"

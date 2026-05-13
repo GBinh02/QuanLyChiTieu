@@ -8,7 +8,8 @@ import { Pie, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, PointElement, LineElement);
 
-const API_URL = 'http://localhost:5000/api';
+// Dùng path tương đối để tương thích với cả dev (vite proxy) lẫn production (nginx proxy)
+const API_URL = '/api';
 
 // --- Components ---
 
@@ -63,10 +64,12 @@ const Summary = ({ transactions }) => {
 const Login = ({ setUser }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
       const res = await axios.post(`${API_URL}/login`, { email, password });
       localStorage.setItem('token', res.data.token);
@@ -74,8 +77,9 @@ const Login = ({ setUser }) => {
       setUser({ username: res.data.username });
       navigate('/');
     } catch (err) {
-      console.error('Login Error:', err);
-      alert('Đăng nhập thất bại. Kiểm tra lại email/mật khẩu.');
+      alert(err.response?.data?.error || 'Đăng nhập thất bại. Kiểm tra lại email/mật khẩu.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -94,7 +98,9 @@ const Login = ({ setUser }) => {
           <label>Mật khẩu</label>
           <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
         </div>
-        <button type="submit" className="btn-primary">Đăng nhập</button>
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+        </button>
       </form>
       <p style={{marginTop: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)'}}>
         Bạn mới sử dụng ứng dụng? <Link to="/register" style={{color: 'var(--primary)', fontWeight: 600, textDecoration: 'none'}}>Tạo tài khoản mới</Link>
@@ -108,6 +114,7 @@ const Register = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleRegister = async (e) => {
@@ -116,19 +123,15 @@ const Register = () => {
       alert('Mật khẩu nhập lại không khớp!');
       return;
     }
+    setLoading(true);
     try {
-      console.log('Attempting registration:', { username, email });
-      const response = await axios.post(`${API_URL}/register`, { username, email, password });
-      console.log('Registration response:', response.data);
-      alert('Đăng ký thành công!');
+      await axios.post(`${API_URL}/register`, { username, email, password });
+      alert('Đăng ký thành công! Vui lòng đăng nhập.');
       navigate('/login');
-    } catch (err) { 
-      console.error('Registration Error Details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
-      });
-      alert('Đăng ký thất bại. Vui lòng kiểm tra console hoặc đảm bảo backend đang chạy.'); 
+    } catch (err) {
+      alert(err.response?.data?.error || 'Đăng ký thất bại. Vui lòng thử lại.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -149,13 +152,15 @@ const Register = () => {
         </div>
         <div className="form-group">
           <label>Mật khẩu</label>
-          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required />
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
         </div>
         <div className="form-group">
           <label>Nhập lại mật khẩu</label>
           <input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
         </div>
-        <button type="submit" className="btn-primary">Đăng ký</button>
+        <button type="submit" className="btn-primary" disabled={loading}>
+          {loading ? 'Đang đăng ký...' : 'Đăng ký'}
+        </button>
       </form>
       <p style={{marginTop: '1.5rem', textAlign: 'center', fontSize: '0.85rem', color: 'var(--text-muted)'}}>
         Đã có tài khoản rồi? <Link to="/login" style={{color: 'var(--primary)', fontWeight: 600, textDecoration: 'none'}}>Đăng nhập ngay</Link>
@@ -169,6 +174,7 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
   const [amount, setAmount] = useState('');
   const [type, setType] = useState('expense');
   const [cat, setCat] = useState('Thực phẩm');
+  const [loading, setLoading] = useState(false);
 
   const CATEGORIES = {
     expense: ['Thực phẩm', 'Di chuyển', 'Nhà ở', 'Giải trí', 'Mua sắm', 'Sức khỏe', 'Giáo dục', 'Khác'],
@@ -180,36 +186,40 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
     setCat(CATEGORIES[newType][0]);
   };
 
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('token');
+    return { Authorization: `Bearer ${token}` };
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const token = localStorage.getItem('token');
-    if (!token) {
-      alert('Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.');
-      return;
-    }
+    setLoading(true);
     try {
-      await axios.post(`${API_URL}/transactions`, 
+      await axios.post(`${API_URL}/transactions`,
         { description: desc, amount: parseFloat(amount), type, category: cat },
-        { headers: { Authorization: `Bearer ${token}` }}
+        { headers: getAuthHeader() }
       );
       setDesc(''); setAmount('');
       fetchTransactions();
     } catch (err) {
-      console.error('Save error:', err);
       if (err.response?.status === 401 || err.response?.status === 403) {
         alert('Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.');
       } else {
         alert('Lưu giao dịch thất bại: ' + (err.response?.data?.error || err.message));
       }
+    } finally {
+      setLoading(false);
     }
   };
 
   const deleteItem = async (id) => {
-    const token = localStorage.getItem('token');
-    await axios.delete(`${API_URL}/transactions/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    fetchTransactions();
+    if (!confirm('Xác nhận xóa giao dịch này?')) return;
+    try {
+      await axios.delete(`${API_URL}/transactions/${id}`, { headers: getAuthHeader() });
+      fetchTransactions();
+    } catch (err) {
+      alert('Xóa thất bại: ' + (err.response?.data?.error || err.message));
+    }
   };
 
   const handleCSVUpload = (e) => {
@@ -220,7 +230,6 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
       header: true,
       skipEmptyLines: true,
       complete: async (results) => {
-        const token = localStorage.getItem('token');
         const transactions = results.data.map(row => {
           const rawType = (row.type || row['Loại'] || '').toLowerCase();
           const isIncome = rawType === 'income' || rawType === 'thu nhập';
@@ -233,20 +242,19 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
         }).filter(t => t.description && !isNaN(t.amount));
 
         if (transactions.length === 0) {
-          alert('Không tìm thấy dữ liệu hợp lệ trong tệp CSV. Vui lòng kiểm tra định dạng.');
+          alert('Không tìm thấy dữ liệu hợp lệ trong tệp CSV.');
           return;
         }
 
         try {
-          await axios.post(`${API_URL}/transactions/bulk`, { transactions }, {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          await axios.post(`${API_URL}/transactions/bulk`, { transactions }, { headers: getAuthHeader() });
           alert(`Đã nhập thành công ${transactions.length} giao dịch!`);
           fetchTransactions();
         } catch (err) {
-          console.error('Import error:', err);
           alert('Lỗi khi nhập dữ liệu: ' + (err.response?.data?.error || err.message));
         }
+        // Reset input để có thể upload cùng file lại
+        e.target.value = '';
       }
     });
   };
@@ -271,11 +279,11 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
           <form onSubmit={handleSubmit}>
             <div className="form-group">
               <label>Tên giao dịch</label>
-              <input type="text" value={desc} onChange={e => setDesc(e.target.value)} required />
+              <input type="text" value={desc} onChange={e => setDesc(e.target.value)} required placeholder="VD: Tiền ăn trưa" />
             </div>
             <div className="form-group">
               <label>Số tiền (VND)</label>
-              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} required />
+              <input type="number" value={amount} onChange={e => setAmount(e.target.value)} required min="0" placeholder="VD: 50000" />
             </div>
             <div className="form-group">
               <label>Loại giao dịch</label>
@@ -292,21 +300,25 @@ const Dashboard = ({ transactions, fetchTransactions }) => {
                 ))}
               </select>
             </div>
-            <button type="submit" className="btn-primary">Lưu giao dịch</button>
+            <button type="submit" className="btn-primary" disabled={loading}>
+              {loading ? 'Đang lưu...' : 'Lưu giao dịch'}
+            </button>
           </form>
         </div>
 
         <div className="card">
           <h3>Lịch sử giao dịch</h3>
           {transactions.length === 0 ? (
-            <div className="empty-state">Chưa có giao dịch nào.</div>
+            <div className="empty-state">Chưa có giao dịch nào. Hãy thêm giao dịch đầu tiên!</div>
           ) : (
             <div className="transaction-list">
               {transactions.map(t => (
                 <div key={t.id} className="transaction-item">
                   <div>
                     <div style={{fontWeight: 700}}>{t.description}</div>
-                    <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>{new Date(t.date).toLocaleDateString('vi-VN')} • {t.category}</div>
+                    <div style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                      {new Date(t.date).toLocaleDateString('vi-VN')} • {t.category}
+                    </div>
                   </div>
                   <div style={{display: 'flex', alignItems: 'center', gap: '1rem'}}>
                     <span style={{fontWeight: 800, color: t.type === 'income' ? 'var(--success)' : 'var(--danger)'}}>
@@ -329,7 +341,6 @@ const Stats = ({ transactions }) => {
   const cats = [...new Set(expenses.map(t => t.category))];
   const catData = cats.map(c => expenses.filter(t => t.category === c).reduce((a, b) => a + parseFloat(b.amount), 0));
 
-  // Daily stats for bar chart
   const dailyStats = {};
   transactions.forEach(t => {
     const date = new Date(t.date).toLocaleDateString('vi-VN');
@@ -361,22 +372,19 @@ const Stats = ({ transactions }) => {
         <div className="card">
           <h3>Biểu đồ thu chi hằng ngày</h3>
           <div style={{height: '350px'}}>
-            <Bar 
-              data={barData} 
-              options={{ 
-                responsive: true, 
+            <Bar
+              data={barData}
+              options={{
+                responsive: true,
                 maintainAspectRatio: false,
                 plugins: { legend: { position: 'bottom' }},
                 scales: {
                   y: {
                     beginAtZero: true,
-                    ticks: {
-                      callback: (value) => value.toLocaleString('vi-VN') + ' đ',
-                      stepSize: 1000000, // Show every 1M VND
-                    }
+                    ticks: { callback: (value) => value.toLocaleString('vi-VN') + ' đ' }
                   }
                 }
-              }} 
+              }}
             />
           </div>
         </div>
@@ -426,30 +434,30 @@ function App() {
   });
   const [transactions, setTransactions] = useState([]);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     setUser(null);
     setTransactions([]);
-  };
+  }, []);
 
   const fetchTransactions = useCallback(async () => {
     const token = localStorage.getItem('token');
+    if (!token) return;
     try {
       const res = await axios.get(`${API_URL}/transactions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setTransactions(res.data);
     } catch (err) {
-      if (err.response?.status === 401) handleLogout();
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        handleLogout();
+      }
     }
-  }, []);
+  }, [handleLogout]);
 
   useEffect(() => {
-    const loadData = async () => {
-      if (user) await fetchTransactions();
-    };
-    loadData();
+    if (user) fetchTransactions();
   }, [user, fetchTransactions]);
 
   return (

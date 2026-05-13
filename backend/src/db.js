@@ -5,45 +5,50 @@ const path = require('path');
 let db;
 
 async function initDb() {
-    try {
-        db = await open({
-            filename: path.join(__dirname, '../database.sqlite'),
-            driver: sqlite3.Database
-        });
+  try {
+    // Dùng :memory: khi test để không cần file DB thật
+    const filename =
+      process.env.NODE_ENV === 'test'
+        ? ':memory:'
+        : path.join(__dirname, '../database.sqlite');
 
-        // Create tables if they don't exist
-        await db.exec(`
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT NOT NULL UNIQUE,
-                email TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            );
-            CREATE TABLE IF NOT EXISTS transactions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                description TEXT NOT NULL,
-                amount REAL NOT NULL,
-                type TEXT NOT NULL,
-                category TEXT,
-                date DATETIME DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-            );
-        `);
-        console.log('Connected to SQLite Database');
-        return db;
-    } catch (error) {
-        console.error('Database Connection Error:', error.message);
-        throw error;
+    db = await open({ filename, driver: sqlite3.Database });
+
+    await db.exec(`
+      CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT NOT NULL UNIQUE,
+        email TEXT NOT NULL UNIQUE,
+        password TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL,
+        category TEXT DEFAULT 'Khác',
+        date DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      );
+    `);
+
+    if (process.env.NODE_ENV !== 'test') {
+      console.log('✅ Kết nối SQLite thành công');
     }
+    return db;
+  } catch (error) {
+    console.error('❌ Lỗi kết nối Database:', error.message);
+    throw error;
+  }
 }
 
 function getDb() {
-    if (!db) {
-        throw new Error('Database not initialized. Call initDb first.');
-    }
-    return db;
+  if (!db) {
+    throw new Error('Database chưa được khởi tạo. Gọi initDb() trước.');
+  }
+  return db;
 }
 
 module.exports = { initDb, getDb };
