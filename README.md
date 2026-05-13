@@ -105,3 +105,117 @@ PORT=5000
 
 ## 🔗 Repo
 https://github.com/GBinh02/QuanLyChiTieu
+
+
+# Fix khi chạy local
+## 🏗️ Kiến trúc
+
+```
+quanLyChiTieu/
+├── backend/          # Node.js + Express + SQLite
+├── frontend/         # React + Vite
+└── docker-compose.yml
+```
+
+---
+
+## 🚀 Chạy Local (Không cần Docker)
+
+> **Yêu cầu:** Node.js >= 18
+
+### Bước 1 – Clone repo
+
+```bash
+git clone <repo-url>
+cd quanLyChiTieu
+```
+
+### Bước 2 – Chạy Backend
+
+```bash
+cd backend
+cp ../.env.example .env       # Tạo file .env
+npm install
+npm start
+# Backend chạy tại: http://localhost:5000
+# Health check:     http://localhost:5000/api/health
+```
+
+### Bước 3 – Chạy Frontend (terminal mới)
+
+```bash
+cd frontend
+npm install
+npm run dev
+# Frontend chạy tại: http://localhost:5173
+```
+
+> **Lưu ý:** Database SQLite (`database.sqlite`) sẽ tự tạo khi backend khởi động lần đầu.  
+> Không cần cài MySQL hay bất kỳ database nào thêm.
+
+---
+
+## 🐳 Chạy với Docker Compose (Deploy)
+
+```bash
+# Build và chạy toàn bộ stack
+docker compose up --build
+
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:5000
+```
+
+---
+
+## 🔑 API Endpoints
+
+| Method | Endpoint | Auth | Mô tả |
+|--------|----------|------|-------|
+| GET | `/api/health` | ❌ | Kiểm tra server |
+| POST | `/api/register` | ❌ | Đăng ký tài khoản |
+| POST | `/api/login` | ❌ | Đăng nhập, trả về JWT |
+| GET | `/api/transactions` | ✅ | Lấy danh sách giao dịch |
+| POST | `/api/transactions` | ✅ | Thêm giao dịch |
+| POST | `/api/transactions/bulk` | ✅ | Nhập nhiều giao dịch từ CSV |
+| DELETE | `/api/transactions/:id` | ✅ | Xóa giao dịch |
+
+**Auth header:** `Authorization: Bearer <token>`
+
+---
+
+## 🧪 Chạy Tests (Backend)
+
+```bash
+cd backend
+npm test
+```
+
+Tests dùng SQLite in-memory – **không cần cài gì thêm**.
+
+---
+
+## 📋 Format CSV nhập liệu
+
+Tải file mẫu từ trong ứng dụng hoặc tạo file `.csv` với cột:
+
+| description | amount | type | category |
+|-------------|--------|------|----------|
+| Tiền ăn trưa | 50000 | expense | Thực phẩm |
+| Lương tháng | 5000000 | income | Lương |
+
+---
+
+## 👥 Team Workflow
+
+```
+main
+ └── feature/backend-xxx  ← Backend dev branch
+ └── feature/frontend-xxx ← Frontend dev branch
+```
+
+1. **Tạo branch** từ `main`: `git checkout -b feature/ten-chuc-nang`
+2. **Push** và tạo **Pull Request** → CI chạy tự động
+3. **Merge** vào `main` sau khi CI pass và có review
+
+> ⚠️ **KHÔNG push trực tiếp lên `main`**  
+> ⚠️ **KHÔNG commit file `.env`** (đã có trong `.gitignore`)

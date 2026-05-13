@@ -433,6 +433,7 @@ function App() {
     return savedUser ? JSON.parse(savedUser) : null;
   });
   const [transactions, setTransactions] = useState([]);
+  const [fetchTrigger, setFetchTrigger] = useState(0);
 
   const handleLogout = useCallback(() => {
     localStorage.removeItem('token');
@@ -441,24 +442,29 @@ function App() {
     setTransactions([]);
   }, []);
 
-  const fetchTransactions = useCallback(async () => {
+  // fetchTransactions chỉ trigger re-fetch, không gọi setState trực tiếp
+  // → tránh lỗi react-hooks/set-state-in-effect
+  const fetchTransactions = useCallback(() => {
+    setFetchTrigger(t => t + 1);
+  }, []);
+
+  // Effect thực sự fetch dữ liệu, gọi setState trong .then() callback (async)
+  // và có cleanup để tránh race condition khi component unmount giữa chừng
+  useEffect(() => {
+    if (!user) return;
     const token = localStorage.getItem('token');
     if (!token) return;
-    try {
-      const res = await axios.get(`${API_URL}/transactions`, {
-        headers: { Authorization: `Bearer ${token}` }
+    let cancelled = false;
+    axios
+      .get(`${API_URL}/transactions`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(res => { if (!cancelled) setTransactions(res.data); })
+      .catch(err => {
+        if (!cancelled && (err.response?.status === 401 || err.response?.status === 403)) {
+          handleLogout();
+        }
       });
-      setTransactions(res.data);
-    } catch (err) {
-      if (err.response?.status === 401 || err.response?.status === 403) {
-        handleLogout();
-      }
-    }
-  }, [handleLogout]);
-
-  useEffect(() => {
-    if (user) fetchTransactions();
-  }, [user, fetchTransactions]);
+    return () => { cancelled = true; };
+  }, [user, fetchTrigger, handleLogout]);
 
   return (
     <Router>
