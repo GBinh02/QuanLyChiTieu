@@ -7,8 +7,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/quanlychitieu-backend
-  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/quanlychitieu-frontend
 
 jobs:
   # ─────────────────────────────────────────────
@@ -27,6 +25,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Bắt buộc lowercase vì Docker registry không chấp nhận chữ hoa
+      - name: Set lowercase image names
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "IMAGE_BACKEND=ghcr.io/${OWNER}/quanlychitieu-backend" >> $GITHUB_ENV
+          echo "IMAGE_FRONTEND=ghcr.io/${OWNER}/quanlychitieu-frontend" >> $GITHUB_ENV
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
