@@ -10,7 +10,7 @@ async function initDb() {
     const filename =
       process.env.NODE_ENV === 'test'
         ? ':memory:'
-        : path.join(__dirname, '../database.sqlite');
+        : (process.env.DATABASE_PATH || path.join(__dirname, '../database.sqlite'));
 
     db = await open({ filename, driver: sqlite3.Database });
 

@@ -8,8 +8,8 @@ import { Pie, Bar } from 'react-chartjs-2';
 
 ChartJS.register(ArcElement, Tooltip, Legend, CategoryScale, LinearScale, BarElement, Title, PointElement, LineElement);
 
-// Dùng path tương đối để tương thích với cả dev (vite proxy) lẫn production (nginx proxy)
-const API_URL = '/api';
+// Dùng biến môi trường hoặc path tương đối
+const API_URL = import.meta.env.VITE_API_URL || '/api';
 
 // --- Components ---
 

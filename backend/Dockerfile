@@ -13,6 +13,7 @@ COPY src ./src
 RUN mkdir -p /app/data
 
 ENV NODE_ENV=production
+ENV DATABASE_PATH=/app/data/database.sqlite
 ENV PORT=5000
 
 EXPOSE 5000

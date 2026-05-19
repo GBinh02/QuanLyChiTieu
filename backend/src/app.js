@@ -7,10 +7,13 @@ const { getDb } = require('./db');
 const app = express();
 const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_change_in_production';
 
-app.use(cors({
-  origin: /^http:\/\/localhost:\d+$/,
+const corsOptions = {
+  origin: process.env.CORS_ORIGIN 
+    ? (process.env.CORS_ORIGIN.includes(',') ? process.env.CORS_ORIGIN.split(',') : process.env.CORS_ORIGIN)
+    : /^http:\/\/localhost:\d+$/,
   credentials: true
-}));
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Middleware verify JWT
