@@ -1,0 +1,43 @@
+name: PR Basic Check
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    name: 🔎 Validate PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check no secrets in code
+        run: |
+          echo "Checking for accidental secret patterns..."
+          # Fail nếu có pattern nghi là hardcode secret
+          if grep -rn --include="*.js" --include="*.jsx" --include="*.ts" \
+            -E "(password|secret|apikey|api_key)\s*=\s*['\"][^'\"]{4,}" \
+            --exclude-dir=node_modules --exclude-dir=.git .; then
+            echo "Possible hardcoded secret found!"
+            exit 1
+          fi
+          echo "No secrets found."
+
+      - name: Check .env not committed
+        run: |
+          if [ -f ".env" ]; then
+            echo ".env file should NOT be committed!"
+            exit 1
+          fi
+          echo ".env not found in repo - OK"
+
+      - name: Check .env.example exists
+        run: |
+          if [ ! -f ".env.example" ]; then
+            echo "Warning: .env.example is missing. Consider adding one."
+          else
+            echo ".env.example found - OK"
+          fi
