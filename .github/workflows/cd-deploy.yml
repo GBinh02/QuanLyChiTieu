@@ -3,142 +3,98 @@ name: CD - Deploy Production
 on:
   push:
     branches: ["main"]
-  workflow_dispatch:        # Cho phép chạy thủ công trên GitHub UI
-
-env:
-  REGISTRY: ghcr.io
+  workflow_dispatch:
 
 jobs:
-  # ─────────────────────────────────────────────
-  # JOB 1: Build & Push Docker images lên ghcr.io
-  # ─────────────────────────────────────────────
-  build-and-push:
-    name: 🐳 Build & Push Docker Images
+  # ──────────────────────────────────────────────────────
+  # JOB 1: Deploy Backend lên Render (qua Deploy Hook)
+  # ──────────────────────────────────────────────────────
+  deploy-backend:
+    name: 🚀 Deploy Backend → Render
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write   # Cần để push lên ghcr.io
 
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Trigger Render Deploy Hook
+        run: |
+          HTTP_STATUS=$(curl -s -o /tmp/render_resp.json -w "%{http_code}" \
+            -X POST "${{ secrets.RENDER_DEPLOY_HOOK_URL }}")
+
+          cat /tmp/render_resp.json
+          echo ""
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "✅ Render deploy triggered (HTTP $HTTP_STATUS)"
+          else
+            echo "❌ Render deploy failed (HTTP $HTTP_STATUS)"
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────────────
+  # JOB 2: Deploy Frontend lên Vercel
+  # ──────────────────────────────────────────────────────
+  deploy-frontend:
+    name: 🌐 Deploy Frontend → Vercel
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Bắt buộc lowercase vì Docker registry không chấp nhận chữ hoa
-      - name: Set lowercase image names
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      # Build & deploy lên Vercel Production
+      # VITE_API_URL phải trỏ đến Render backend URL (không dùng /api nữa)
+      - name: Deploy to Vercel
+        working-directory: frontend
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          echo "IMAGE_BACKEND=ghcr.io/${OWNER}/quanlychitieu-backend" >> $GITHUB_ENV
-          echo "IMAGE_FRONTEND=ghcr.io/${OWNER}/quanlychitieu-frontend" >> $GITHUB_ENV
+          # Pull Vercel project settings
+          vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Build với biến VITE_API_URL trỏ về Render
+          vercel build --prod --token=$VERCEL_TOKEN \
+            -e VITE_API_URL=${{ secrets.VITE_API_URL }}
 
-      - name: Extract Docker metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ env.IMAGE_BACKEND }}
-            ${{ env.IMAGE_FRONTEND }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=raw,value=latest
+          # Deploy artifacts đã build
+          vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
 
-      # ── Backend ──
-      - name: Build & Push Backend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./backend
-          push: true
-          tags: |
-            ${{ env.IMAGE_BACKEND }}:latest
-            ${{ env.IMAGE_BACKEND }}:sha-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.IMAGE_BACKEND }}:latest
-          cache-to: type=inline
-
-      # ── Frontend ──
-      - name: Build & Push Frontend image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./frontend
-          push: true
-          tags: |
-            ${{ env.IMAGE_FRONTEND }}:latest
-            ${{ env.IMAGE_FRONTEND }}:sha-${{ github.sha }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=${{ env.IMAGE_FRONTEND }}:latest
-          cache-to: type=inline
-
-  # ─────────────────────────────────────────────
-  # JOB 2: SSH vào VPS, pull images mới & restart
-  # ─────────────────────────────────────────────
-  deploy:
-    name: 🚀 Deploy to VPS
+  # ──────────────────────────────────────────────────────
+  # JOB 3: Health Check sau khi cả 2 deploy xong
+  # ──────────────────────────────────────────────────────
+  health-check:
+    name: ✅ Health Check
     runs-on: ubuntu-latest
-    needs: build-and-push
-    environment: production   # Bảo vệ bằng GitHub Environment (optional)
+    needs: [deploy-backend, deploy-frontend]
 
     steps:
-      - name: Checkout code (lấy docker-compose.yml)
-        uses: actions/checkout@v4
+      - name: Wait for Render to be ready
+        run: |
+          echo "⏳ Chờ Render khởi động (tối đa 120s)..."
+          BACKEND_URL="${{ secrets.RENDER_BACKEND_URL }}"
 
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || '22' }}
-          script: |
-            set -e
+          for i in $(seq 1 24); do
+            STATUS=$(curl -sf "${BACKEND_URL}/api/health" \
+              -o /dev/null -w "%{http_code}" || echo "000")
 
-            # ── Tới thư mục dự án trên VPS ──
-            cd ${{ secrets.VPS_PROJECT_PATH }}
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Backend healthy! (HTTP $STATUS)"
+              exit 0
+            fi
 
-            # ── Pull code mới nhất (docker-compose.yml) ──
-            git pull origin main
+            echo "⏳ Attempt $i/24 — HTTP $STATUS. Retry sau 5s..."
+            sleep 5
+          done
 
-            # ── Đăng nhập ghcr.io để pull images private ──
-            echo "${{ secrets.GITHUB_TOKEN }}" | \
-              docker login ghcr.io -u ${{ github.actor }} --password-stdin
-
-            # ── Pull images mới build xong ──
-            docker pull ${{ env.IMAGE_BACKEND }}:latest
-            docker pull ${{ env.IMAGE_FRONTEND }}:latest
-
-            # ── Restart với zero-downtime (backend trước, frontend sau) ──
-            docker compose up -d --no-build --force-recreate
-
-            # ── Dọn images cũ (tiết kiệm disk VPS) ──
-            docker image prune -f
-
-            echo "✅ Deploy thành công! Commit: ${{ github.sha }}"
-
-      - name: Health check sau deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          port: ${{ secrets.VPS_PORT || 22 }}
-          script: |
-            # Chờ backend healthy (tối đa 60 giây)
-            for i in $(seq 1 12); do
-              STATUS=$(curl -sf http://localhost:5000/api/health && echo "OK" || echo "FAIL")
-              if [ "$STATUS" = "OK" ]; then
-                echo "✅ Health check passed!"
-                exit 0
-              fi
-              echo "⏳ Chờ backend... ($i/12)"
-              sleep 5
-            done
-            echo "❌ Health check thất bại sau 60 giây."
-            exit 1
+          echo "❌ Health check thất bại sau 120 giây."
+          exit 1
