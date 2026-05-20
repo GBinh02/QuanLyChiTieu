@@ -62,9 +62,8 @@ jobs:
           # Pull Vercel project settings
           vercel pull --yes --environment=production --token=$VERCEL_TOKEN
 
-          # Build với biến VITE_API_URL trỏ về Render
-          vercel build --prod --token=$VERCEL_TOKEN \
-            -e VITE_API_URL=${{ secrets.VITE_API_URL }}
+          # Build (VITE_API_URL đã set sẵn trong Vercel project settings)
+          vercel build --prod --token=$VERCEL_TOKEN
 
           # Deploy artifacts đã build
           vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
