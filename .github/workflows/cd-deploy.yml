@@ -29,15 +29,11 @@ jobs:
             exit 1
           fi
 
-  # ──────────────────────────────────────────────────────
   # NOTE: Frontend (Vercel) tự động deploy qua GitHub
   # integration — không cần job riêng ở đây.
   # Vercel detect push lên main và build tự động.
-  # ──────────────────────────────────────────────────────
 
-  # ──────────────────────────────────────────────────────
   # JOB 2: Health Check Backend sau deploy
-  # ──────────────────────────────────────────────────────
   health-check:
     name: ✅ Health Check Backend
     runs-on: ubuntu-latest
